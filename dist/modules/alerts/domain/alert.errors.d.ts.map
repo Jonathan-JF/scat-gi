@@ -1,0 +1,1 @@
+{"version":3,"file":"alert.errors.d.ts","sourceRoot":"","sources":["../../../../src/modules/alerts/domain/alert.errors.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,MAAM,0BAA0B,CAAC;AAEpD,qBAAa,UAAW,SAAQ,QAAQ;gBAC1B,IAAI,EAAE,MAAM,EAAE,UAAU,EAAE,MAAM,EAAE,OAAO,EAAE,MAAM;CAI9D"}

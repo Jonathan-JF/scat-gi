@@ -1,0 +1,1 @@
+{"version":3,"file":"geo.errors.d.ts","sourceRoot":"","sources":["../../../../src/modules/geo/domain/geo.errors.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,MAAM,0BAA0B,CAAC;AAEpD,qBAAa,QAAS,SAAQ,QAAQ;gBACxB,IAAI,EAAE,MAAM,EAAE,UAAU,EAAE,MAAM,EAAE,OAAO,EAAE,MAAM;CAI9D"}

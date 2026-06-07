@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCAT-GI — Dashboard Operativo</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; overflow: hidden; }
+
+    /* LOGIN */
+    #login-screen {
+      position: fixed; inset: 0; background: #0f172a;
+      display: flex; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .login-card {
+      background: #1e293b; border-radius: 12px; padding: 40px;
+      width: 400px; border: 1px solid #334155;
+    }
+    .login-card h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; color: #f1f5f9; }
+    .login-card p { font-size: 13px; color: #94a3b8; margin-bottom: 28px; }
+    .login-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+    .login-logo .icon { width: 40px; height: 40px; background: #dc2626; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-group input {
+      width: 100%; padding: 10px 14px; background: #0f172a;
+      border: 1px solid #334155; border-radius: 8px; color: #f1f5f9;
+      font-size: 14px; outline: none; transition: border-color 0.2s;
+    }
+    .form-group input:focus { border-color: #3b82f6; }
+    .btn-primary {
+      width: 100%; padding: 11px; background: #dc2626; border: none;
+      border-radius: 8px; color: white; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.2s; margin-top: 8px;
+    }
+    .btn-primary:hover { background: #b91c1c; }
+    .login-error { color: #f87171; font-size: 13px; margin-top: 10px; display: none; }
+
+    /* LAYOUT */
+    #app { display: none; height: 100vh; flex-direction: column; }
+    header {
+      background: #1e293b; border-bottom: 1px solid #334155;
+      padding: 0 20px; height: 56px; display: flex; align-items: center;
+      justify-content: space-between; flex-shrink: 0;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-logo { width: 32px; height: 32px; background: #dc2626; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .header-title { font-size: 16px; font-weight: 600; }
+    .header-subtitle { font-size: 12px; color: #64748b; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .operator-badge { font-size: 12px; color: #94a3b8; }
+    .btn-logout { background: none; border: 1px solid #334155; color: #94a3b8; padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .btn-logout:hover { border-color: #dc2626; color: #f87171; }
+    #alert-banner {
+      background: #dc2626; color: white; padding: 8px 20px;
+      font-size: 13px; font-weight: 500; display: none;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.85} }
+
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* SIDEBAR */
+    .sidebar { width: 340px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+    .tabs { display: flex; border-bottom: 1px solid #334155; }
+    .tab { flex: 1; padding: 12px; text-align: center; font-size: 13px; font-weight: 500; cursor: pointer; color: #64748b; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab.active { color: #f1f5f9; border-bottom-color: #dc2626; }
+    .tab-content { flex: 1; overflow-y: auto; padding: 12px; display: none; }
+    .tab-content.active { display: block; }
+
+    /* KPIs */
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .kpi { background: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; }
+    .kpi-label { font-size: 11px; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .kpi-value { font-size: 24px; font-weight: 700; color: #f1f5f9; }
+    .kpi-value.red { color: #f87171; }
+    .kpi-value.green { color: #4ade80; }
+    .kpi-value.yellow { color: #fbbf24; }
+
+    /* CARDS */
+    .card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.2s; }
+    .card:hover { border-color: #475569; }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    .card-title { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+    .card-desc { font-size: 12px; color: #64748b; line-height: 1.4; }
+    .card-meta { font-size: 11px; color: #475569; margin-top: 6px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-pending { background: #1e3a5f; color: #60a5fa; }
+    .badge-reviewed { background: #1a3a2a; color: #4ade80; }
+    .badge-rejected { background: #3b1a1a; color: #f87171; }
+    .badge-active { background: #3b1a1a; color: #f87171; }
+    .badge-contained { background: #2d2a1a; color: #fbbf24; }
+    .badge-resolved { background: #1a3a2a; color: #4ade80; }
+    .badge-high { background: #450a0a; color: #fca5a5; }
+    .badge-medium { background: #431407; color: #fdba74; }
+    .badge-low { background: #1c1917; color: #a8a29e; }
+    .badge-critical { background: #3b0764; color: #d8b4fe; }
+    .badge-sent { background: #1a3a2a; color: #4ade80; }
+    .badge-failed { background: #3b1a1a; color: #f87171; }
+
+    .btn-confirm {
+      width: 100%; margin-top: 10px; padding: 8px;
+      background: #dc2626; border: none; border-radius: 6px;
+      color: white; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn-confirm:hover { background: #b91c1c; }
+    .btn-confirm:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+
+    .section-title { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 8px; }
+    .empty-state { text-align: center; padding: 32px 16px; color: #475569; font-size: 13px; }
+
+    /* MAP */
+    #map { flex: 1; z-index: 1; }
+
+    /* MODAL */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 999; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #1e293b; border-radius: 12px; padding: 24px; width: 420px; border: 1px solid #334155; }
+    .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 5px; font-weight: 500; }
+    .modal-field input, .modal-field select, .modal-field textarea {
+      width: 100%; padding: 9px 12px; background: #0f172a;
+      border: 1px solid #334155; border-radius: 6px; color: #f1f5f9; font-size: 13px; outline: none;
+    }
+    .modal-field textarea { height: 70px; resize: none; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .btn-cancel { flex: 1; padding: 9px; background: #334155; border: none; border-radius: 6px; color: #94a3b8; font-size: 13px; cursor: pointer; }
+    .btn-submit { flex: 2; padding: 9px; background: #dc2626; border: none; border-radius: 6px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+    .loader { text-align: center; padding: 20px; color: #475569; font-size: 13px; }
+    .alert-item { border-left: 3px solid #dc2626; }
+    .new-alert-dot { width: 8px; height: 8px; background: #dc2626; border-radius: 50%; display: inline-block; margin-left: 6px; animation: pulse 1s infinite; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon">🔥</div>
+      <div>
+        <div style="font-weight:700;font-size:18px">SCAT-GI</div>
+        <div style="font-size:12px;color:#64748b">Sistema de Alertas Tempranas</div>
+      </div>
+    </div>
+    <h1>Dashboard Operativo</h1>
+    <p>Municipalidad Valle del Sol · Región Chimbarongo</p>
+    <div class="form-group">
+      <label>Correo electrónico</label>
+      <input type="email" id="login-email" value="angelica.cisternas@valledelsol.cl" placeholder="operador@municipio.cl">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="login-password" value="operator123" placeholder="••••••••">
+    </div>
+    <button class="btn-primary" onclick="doLogin()">Iniciar sesión</button>
+    <div class="login-error" id="login-error">Credenciales incorrectas. Verifica tu email y contraseña.</div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRMAR INCIDENTE -->
+<div class="modal-overlay" id="modal-incident">
+  <div class="modal">
+    <h3>🚨 Confirmar Incidente</h3>
+    <input type="hidden" id="modal-report-id">
+    <div class="modal-field">
+      <label>Nombre del incidente</label>
+      <input type="text" id="modal-name" placeholder="Ej: Incendio Sector Norte">
+    </div>
+    <div class="modal-field">
+      <label>Severidad</label>
+      <select id="modal-severity">
+        <option value="LOW">Baja</option>
+        <option value="MEDIUM">Media</option>
+        <option value="HIGH" selected>Alta</option>
+        <option value="CRITICAL">Crítica</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Descripción (opcional)</label>
+      <textarea id="modal-desc" placeholder="Detalles adicionales del incidente..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-submit" onclick="submitIncident()">Confirmar y generar alerta</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header>
+    <div class="header-left">
+      <div class="header-logo">🔥</div>
+      <div>
+        <div class="header-title">SCAT-GI — Dashboard Operativo</div>
+        <div class="header-subtitle">Municipalidad Valle del Sol · Región Chimbarongo</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="operator-badge" id="operator-name">Cargando...</span>
+      <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <div id="alert-banner" id="alert-banner">
+    🚨 <span id="alert-banner-text"></span>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('reports')">Reportes</div>
+        <div class="tab" onclick="switchTab('incidents')">Incidentes</div>
+        <div class="tab" onclick="switchTab('alerts')">Alertas</div>
+      </div>
+
+      <!-- REPORTES -->
+      <div class="tab-content active" id="tab-reports">
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-label">Reportes hoy</div>
+            <div class="kpi-value yellow" id="kpi-reports-today">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Pendientes</div>
+            <div class="kpi-value red" id="kpi-reports-pending">—</div>
+          </div>
+        </div>
+        <div class="section-title">Reportes ciudadanos</div>
+        <div id="reports-list"><div class="loader">Cargando reportes...</div></div>
+      </div>
+
+      <!-- INCIDENTES -->
+      <div class="tab-content" id="tab-incidents">
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-label">Activos</div>
+            <div class="kpi-value red" id="kpi-incidents-active">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Resueltos</div>
+            <div class="kpi-value green" id="kpi-incidents-resolved">—</div>
+          </div>
+        </div>
+        <div class="section-title">Incidentes activos</div>
+        <div id="incidents-list"><div class="loader">Cargando incidentes...</div></div>
+      </div>
+
+      <!-- ALERTAS -->
+      <div class="tab-content" id="tab-alerts">
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-label">Total alertas</div>
+            <div class="kpi-value" id="kpi-alerts-total">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Enviadas</div>
+            <div class="kpi-value green" id="kpi-alerts-sent">—</div>
+          </div>
+        </div>
+        <div class="section-title">Registro de alertas <span id="new-alert-indicator"></span></div>
+        <div id="alerts-list"><div class="loader">Cargando alertas...</div></div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:3000/api';
+let token = localStorage.getItem('scat_token');
+let currentUser = null;
+let map = null;
+let markersLayer = null;
+let socket = null;
+
+// ─── AUTH ───────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error();
+    token = data.data.token;
+    currentUser = data.data.user;
+    localStorage.setItem('scat_token', token);
+    startApp();
+  } catch {
+    errEl.style.display = 'block';
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem('scat_token');
+  token = null;
+  if (socket) socket.disconnect();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ─── APP INIT ────────────────────────────────────────
+async function startApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('operator-name').textContent = currentUser?.email || 'Operador';
+
+  initMap();
+  initSocket();
+  await Promise.all([loadReports(), loadIncidents(), loadAlerts()]);
+  loadGeoData();
+}
+
+// Auto-login si hay token guardado
+async function tryAutoLogin() {
+  if (!token) return;
+  try {
+    const res = await fetch(`${API}/users/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error();
+    currentUser = data.data;
+    startApp();
+  } catch {
+    localStorage.removeItem('scat_token');
+    token = null;
+  }
+}
+
+// ─── MAP ─────────────────────────────────────────────
+function initMap() {
+  if (map) return;
+  map = L.map('map').setView([-34.5678, -71.1234], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+}
+
+async function loadGeoData() {
+  try {
+    const [incRes, repRes] = await Promise.all([
+      fetch(`${API}/geo/incidents/active`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API}/geo/reports/recent`, { headers: { Authorization: `Bearer ${token}` } })
+    ]);
+    const incData = await incRes.json();
+    const repData = await repRes.json();
+    markersLayer.clearLayers();
+
+    // Incidentes — marcador rojo
+    if (incData.features) {
+      incData.features.forEach(f => {
+        const [lng, lat] = f.geometry.coordinates;
+        const icon = L.divIcon({
+          html: `<div style="background:#dc2626;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 0 8px rgba(220,38,38,0.8)"></div>`,
+          iconSize: [16, 16], iconAnchor: [8, 8], className: ''
+        });
+        L.marker([lat, lng], { icon })
+          .bindPopup(`<b>🔥 ${f.properties.name}</b><br>Severidad: ${f.properties.severity}<br>Estado: ${f.properties.status}`)
+          .addTo(markersLayer);
+      });
+    }
+
+    // Reportes — marcador naranja
+    if (repData.features) {
+      repData.features.forEach(f => {
+        const [lng, lat] = f.geometry.coordinates;
+        const icon = L.divIcon({
+          html: `<div style="background:#f97316;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px rgba(249,115,22,0.6)"></div>`,
+          iconSize: [12, 12], iconAnchor: [6, 6], className: ''
+        });
+        L.marker([lat, lng], { icon })
+          .bindPopup(`<b>📍 Reporte ciudadano</b><br>${f.properties.description || 'Sin descripción'}`)
+          .addTo(markersLayer);
+      });
+    }
+  } catch (e) {
+    console.error('Error cargando geodata:', e);
+  }
+}
+
+// ─── SOCKET.IO ───────────────────────────────────────
+function initSocket() {
+  try {
+    socket = io('http://localhost:3000', { auth: { token } });
+    socket.on('alert:issued', (alert) => {
+      showAlertBanner(`Nueva alerta: ${alert.message || 'Incidente confirmado'}`);
+      loadAlerts();
+      loadGeoData();
+      document.getElementById('new-alert-indicator').innerHTML = '<span class="new-alert-dot"></span>';
+    });
+  } catch (e) {
+    console.log('Socket no disponible:', e);
+  }
+}
+
+function showAlertBanner(msg) {
+  const banner = document.getElementById('alert-banner');
+  document.getElementById('alert-banner-text').textContent = msg;
+  banner.style.display = 'block';
+  setTimeout(() => banner.style.display = 'none', 8000);
+}
+
+// ─── TABS ────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['reports','incidents','alerts'][i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'alerts') document.getElementById('new-alert-indicator').innerHTML = '';
+}
+
+// ─── REPORTS ─────────────────────────────────────────
+async function loadReports() {
+  try {
+    const res = await fetch(`${API}/reports`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    const reports = data.data || [];
+
+    const today = reports.filter(r => {
+      const d = new Date(r.createdAt);
+      const now = new Date();
+      return d.toDateString() === now.toDateString();
+    });
+    const pending = reports.filter(r => r.status === 'PENDING');
+
+    document.getElementById('kpi-reports-today').textContent = today.length;
+    document.getElementById('kpi-reports-pending').textContent = pending.length;
+
+    const list = document.getElementById('reports-list');
+    if (!reports.length) {
+      list.innerHTML = '<div class="empty-state">No hay reportes registrados</div>';
+      return;
+    }
+
+    list.innerHTML = reports.map(r => `
+      <div class="card" onclick="focusOnMap(${r.latitude}, ${r.longitude})">
+        <div class="card-header">
+          <span class="card-title">📍 Reporte ciudadano</span>
+          <span class="badge badge-${r.status.toLowerCase()}">${statusLabel(r.status)}</span>
+        </div>
+        <div class="card-desc">${r.description || 'Sin descripción'}</div>
+        <div class="card-meta">
+          Lat: ${r.latitude?.toFixed(4)}, Lng: ${r.longitude?.toFixed(4)} · 
+          ${timeAgo(r.createdAt)}
+        </div>
+        ${r.status === 'PENDING' ? `
+          <button class="btn-confirm" onclick="openModal('${r.id}', event)">
+            🚨 Confirmar como incidente
+          </button>` : ''}
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('reports-list').innerHTML = '<div class="empty-state">Error cargando reportes</div>';
+  }
+}
+
+// ─── INCIDENTS ───────────────────────────────────────
+async function loadIncidents() {
+  try {
+    const res = await fetch(`${API}/incidents`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    const incidents = data.data || [];
+
+    const active = incidents.filter(i => i.status === 'ACTIVE');
+    const resolved = incidents.filter(i => i.status === 'RESOLVED');
+
+    document.getElementById('kpi-incidents-active').textContent = active.length;
+    document.getElementById('kpi-incidents-resolved').textContent = resolved.length;
+
+    const list = document.getElementById('incidents-list');
+    if (!incidents.length) {
+      list.innerHTML = '<div class="empty-state">No hay incidentes activos</div>';
+      return;
+    }
+
+    list.innerHTML = incidents.map(i => `
+      <div class="card" onclick="focusOnMap(${i.latitude}, ${i.longitude})">
+        <div class="card-header">
+          <span class="card-title">🔥 ${i.name}</span>
+          <span class="badge badge-${i.severity.toLowerCase()}">${severityLabel(i.severity)}</span>
+        </div>
+        <div class="card-meta">
+          Estado: <span class="badge badge-${i.status.toLowerCase()}">${statusLabel(i.status)}</span>
+          · ${timeAgo(i.startedAt)}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('incidents-list').innerHTML = '<div class="empty-state">Error cargando incidentes</div>';
+  }
+}
+
+// ─── ALERTS ──────────────────────────────────────────
+async function loadAlerts() {
+  try {
+    const res = await fetch(`${API}/alerts`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    const alerts = data.data || [];
+
+    document.getElementById('kpi-alerts-total').textContent = alerts.length;
+    document.getElementById('kpi-alerts-sent').textContent = alerts.filter(a => a.status === 'SENT').length;
+
+    const list = document.getElementById('alerts-list');
+    if (!alerts.length) {
+      list.innerHTML = '<div class="empty-state">No hay alertas registradas</div>';
+      return;
+    }
+
+    list.innerHTML = alerts.map(a => `
+      <div class="card alert-item">
+        <div class="card-header">
+          <span class="card-title">🔔 Alerta SMS</span>
+          <span class="badge badge-${a.status.toLowerCase()}">${a.status}</span>
+        </div>
+        <div class="card-desc">${a.message || 'Alerta generada automáticamente'}</div>
+        <div class="card-meta">${timeAgo(a.sentAt || a.createdAt)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('alerts-list').innerHTML = '<div class="empty-state">Error cargando alertas</div>';
+  }
+}
+
+// ─── MODAL INCIDENTE ─────────────────────────────────
+function openModal(reportId, event) {
+  event.stopPropagation();
+  document.getElementById('modal-report-id').value = reportId;
+  document.getElementById('modal-name').value = '';
+  document.getElementById('modal-desc').value = '';
+  document.getElementById('modal-incident').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-incident').classList.remove('open');
+}
+
+async function submitIncident() {
+  const reportId = document.getElementById('modal-report-id').value;
+  const name = document.getElementById('modal-name').value.trim();
+  const severity = document.getElementById('modal-severity').value;
+  const description = document.getElementById('modal-desc').value.trim();
+
+  if (!name) {
+    alert('Ingresa un nombre para el incidente');
+    return;
+  }
+
+  const btn = document.querySelector('.btn-submit');
+  btn.disabled = true;
+  btn.textContent = 'Creando incidente...';
+
+  try {
+    const res = await fetch(`${API}/incidents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ reportId, name, severity, description })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Error al crear incidente');
+
+    closeModal();
+    showAlertBanner(`Incidente "${name}" confirmado — alerta generada automáticamente`);
+    await Promise.all([loadReports(), loadIncidents(), loadAlerts()]);
+    loadGeoData();
+    switchTab('incidents');
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar y generar alerta';
+  }
+}
+
+// ─── HELPERS ─────────────────────────────────────────
+function focusOnMap(lat, lng) {
+  if (map && lat && lng) map.setView([lat, lng], 15);
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+  if (diff < 60) return 'hace unos segundos';
+  if (diff < 3600) return `hace ${Math.floor(diff/60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff/3600)}h`;
+  return new Date(dateStr).toLocaleDateString('es-CL');
+}
+
+function statusLabel(s) {
+  return { PENDING:'Pendiente', REVIEWED:'Revisado', REJECTED:'Rechazado', ACTIVE:'Activo', CONTAINED:'Contenido', RESOLVED:'Resuelto' }[s] || s;
+}
+
+function severityLabel(s) {
+  return { LOW:'Baja', MEDIUM:'Media', HIGH:'Alta', CRITICAL:'Crítica' }[s] || s;
+}
+
+// ─── INIT ─────────────────────────────────────────────
+tryAutoLogin();
+</script>
+</body>
+</html>

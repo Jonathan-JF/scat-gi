@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../../../middleware/auth.middleware");
+const role_middleware_1 = require("../../../middleware/role.middleware");
+const upload_config_1 = require("../../../config/upload.config");
+const report_controller_1 = require("./report.controller");
+const report_service_impl_1 = require("../application/report.service.impl");
+const report_repository_1 = require("../infrastructure/report.repository");
+const router = (0, express_1.Router)();
+const reportRepository = new report_repository_1.ReportRepository();
+const reportService = new report_service_impl_1.ReportService(reportRepository);
+const reportController = new report_controller_1.ReportController(reportService);
+router.post('/reports', auth_middleware_1.authMiddleware, (0, role_middleware_1.requireRole)('CITIZEN'), upload_config_1.upload.single('photo'), reportController.create);
+router.get('/reports/my', auth_middleware_1.authMiddleware, (0, role_middleware_1.requireRole)('CITIZEN'), reportController.findMyReports);
+router.get('/reports', auth_middleware_1.authMiddleware, (0, role_middleware_1.requireRole)('OPERATOR', 'ADMIN'), reportController.findAll);
+router.get('/reports/:id', auth_middleware_1.authMiddleware, (0, role_middleware_1.requireRole)('OPERATOR', 'ADMIN', 'CITIZEN'), reportController.findById);
+router.patch('/reports/:id/status', auth_middleware_1.authMiddleware, (0, role_middleware_1.requireRole)('OPERATOR', 'ADMIN'), reportController.updateStatus);
+exports.default = router;
+//# sourceMappingURL=report.routes.js.map

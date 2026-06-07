@@ -1,0 +1,1 @@
+{"version":3,"file":"create-incident.dto.d.ts","sourceRoot":"","sources":["../../../../../src/modules/incidents/presentation/dto/create-incident.dto.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,CAAC,EAAE,MAAM,KAAK,CAAC;AAExB,eAAO,MAAM,uBAAuB;;;;;;;;;;iBAKlC,CAAC;AAEH,MAAM,MAAM,iBAAiB,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,uBAAuB,CAAC,CAAC"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"incident.errors.d.ts","sourceRoot":"","sources":["../../../../src/modules/incidents/domain/incident.errors.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,MAAM,0BAA0B,CAAC;AAEpD,qBAAa,aAAc,SAAQ,QAAQ;gBAC7B,IAAI,EAAE,MAAM,EAAE,UAAU,EAAE,MAAM,EAAE,OAAO,EAAE,MAAM;CAI9D"}

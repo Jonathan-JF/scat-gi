@@ -1,0 +1,182 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USERS MODULE - Citizens and Operators
+// ============================================================================
+
+enum UserRole {
+  CITIZEN
+  OPERATOR
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  password  String   // bcrypt hashed
+  role      UserRole @default(CITIZEN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  reports       Report[]
+  incidents     Incident[]
+  notifications Notification[]
+
+  @@index([email])
+  @@index([role])
+}
+
+// ============================================================================
+// REPORTS MODULE - Citizen Reports
+// ============================================================================
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  REJECTED
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  citizen     User         @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+  citizenId   String
+  description String
+  photoUrl    String?
+  videoUrl    String?
+  latitude    Float
+  longitude   Float
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  incident Incident?
+
+  @@index([citizenId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// INCIDENTS MODULE - Official Incidents
+// ============================================================================
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  ACTIVE
+  CONTAINED
+  RESOLVED
+}
+
+model Incident {
+  id          String            @id @default(cuid())
+  report      Report?           @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  reportId    String?           @unique
+  operator    User?             @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+  operatorId  String?
+  name        String
+  description String?
+  severity    IncidentSeverity  @default(MEDIUM)
+  status      IncidentStatus    @default(ACTIVE)
+  latitude    Float
+  longitude   Float
+  startedAt   DateTime          @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Relations
+  alerts Alert[]
+
+  @@index([operatorId])
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// ALERTS MODULE - Alerts and Notifications
+// ============================================================================
+
+enum AlertChannel {
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum AlertStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Alert {
+  id        String      @id @default(cuid())
+  incident  Incident    @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  incidentId String
+  message   String
+  channel   AlertChannel @default(SMS)
+  status    AlertStatus @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Relations
+  notifications Notification[]
+
+  @@index([incidentId])
+  @@index([status])
+  @@index([channel])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  alert       Alert     @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  alertId     String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([alertId])
+  @@index([userId])
+  @@index([deliveredAt])
+}
+
+// ============================================================================
+// GEO MODULE - Risk Zones (Predefined Geographical Areas)
+// ============================================================================
+
+model RiskZone {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  // PostGIS geometry stored as JSON for polygons
+  // Format: {"type": "Polygon", "coordinates": [...]}
+  geometry    Json
+  riskLevel   Int       @default(1) // 1-5 scale
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([riskLevel])
+}
