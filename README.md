@@ -293,6 +293,3 @@ npm test                 # Ejecutar tests unitarios
 - `docs/base-de-datos.md` — Esquema ER y queries geoespaciales
 - `docs/defensa.md` — Guión de defensa oral y banco de preguntas
 - `AGENTS.md` — Reglas obligatorias del proyecto (22 secciones)
-**Última actualización**: 7 de junio de 2026  
-**Estado**: ✅ Esquema Prisma completo y datos semilla cargados  
-**Próximo paso**: Crear módulos del backend (Users, Reports, Incidents, Alerts, Geo)
