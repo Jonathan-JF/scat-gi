@@ -22,16 +22,16 @@
 
 | Componente | Estado |
 |---|---|
-| Docker (PostgreSQL + Redis) | ✅ Funcionando |
+| Docker (Postgres + Redis + Backend + Dashboard) | ✅ Funcionando con un solo comando |
 | Backend API (Node.js) | ✅ Funcionando en puerto 3000 |
-| Base de datos + migraciones | ✅ Aplicadas |
-| Datos semilla | ✅ Cargados |
+| Base de datos + migraciones | ✅ Se aplican automáticamente al iniciar |
+| Datos semilla | ✅ Se cargan automáticamente al iniciar |
 | Módulo users (auth + JWT) | ✅ Completo |
 | Módulo reports | ✅ Completo |
 | Módulo incidents | ✅ Completo |
 | Módulo alerts (Bull + Twilio) | ✅ Completo |
 | Módulo geo (GeoJSON) | ✅ Completo |
-| Dashboard web | ✅ Funcionando |
+| Dashboard web | ✅ Funcionando en puerto 8080 |
 | App móvil | 🔄 Pendiente |
 
 ---
@@ -39,7 +39,7 @@
 ## Flujo demostrable (defensa oral)
 
 ```
-1. Operador hace login en el dashboard
+1. Operador hace login en el dashboard (localhost:8080)
 2. Ciudadano envía reporte con foto y GPS
 3. Operador ve el reporte en el mapa
 4. Operador confirma el reporte como incidente
@@ -51,13 +51,15 @@
 
 ## Requisitos previos
 
-- Node.js 20 LTS
-- Docker Desktop
+- **Docker Desktop** (único requisito real)
+- Git
 - Navegador web moderno (Chrome recomendado)
+
+> No necesitas instalar Node.js, PostgreSQL ni Redis en tu máquina. Todo corre dentro de Docker.
 
 ---
 
-## Cómo levantar el sistema
+## Cómo levantar el sistema completo
 
 ### 1 — Clonar el repositorio
 
@@ -66,61 +68,90 @@ git clone https://github.com/tu-usuario/scat-gi.git
 cd scat-gi
 ```
 
-### 2 — Levantar Docker
-
-Abre Docker Desktop y espera que esté corriendo. Luego:
-
-```bash
-docker-compose up -d
-```
-
-Verifica que ambos servicios estén activos:
-
-```bash
-docker-compose ps
-```
-
-Debes ver `scat-gi-postgres` y `scat-gi-redis` en estado `Up`.
-
-### 3 — Instalar dependencias del backend
-
-```bash
-npm install
-```
-
-### 4 — Configurar variables de entorno
+### 2 — Configurar variables de entorno
 
 ```bash
 cp .env.example .env
 ```
 
-### 5 — Aplicar migraciones y cargar datos semilla
+### 3 — Abrir Docker Desktop
+
+Espera a que el ícono de la ballena 🐳 quede estático antes de continuar.
+
+### 4 — Levantar todo el sistema con un solo comando
 
 ```bash
+docker-compose up -d --build
+```
+
+Este comando automáticamente:
+
+- Levanta PostgreSQL 15 con PostGIS habilitado
+- Levanta Redis 7
+- Construye la imagen del backend
+- Aplica las migraciones de Prisma
+- Carga los datos semilla (si no existen)
+- Inicia el servidor Express en el puerto 3000
+- Sirve el dashboard en Nginx en el puerto 8080
+
+La primera vez tarda 2-3 minutos en construir la imagen del backend. Las siguientes veces es casi instantáneo.
+
+### 5 — Verificar que los 4 contenedores estén arriba
+
+```bash
+docker-compose ps
+```
+
+Debes ver `scat-gi-postgres`, `scat-gi-redis`, `scat-gi-backend` y `scat-gi-dashboard`, todos en estado `Up`.
+
+### 6 — Abrir el dashboard
+
+```
+http://localhost:8080
+```
+
+Las credenciales de operador ya están precargadas en el formulario de login.
+
+---
+
+## Comandos útiles de Docker
+
+```bash
+# Ver logs del backend en vivo
+docker-compose logs -f backend
+
+# Reiniciar solo el backend tras un cambio de código
+docker-compose up -d --build backend
+
+# Detener todo sin borrar datos
+docker-compose down
+
+# Detener todo y borrar la base de datos (reinicio limpio)
+docker-compose down -v
+
+# Ver estado de los 4 servicios
+docker-compose ps
+```
+
+---
+
+## Modo desarrollo (opcional, sin Docker para el backend)
+
+Si prefieres trabajar con hot-reload sin reconstruir la imagen cada vez:
+
+```bash
+# Deja solo Postgres y Redis en Docker
+docker-compose up -d postgres redis
+
+# Corre el backend localmente
+npm install
 npx prisma generate
 npx prisma migrate deploy
 npm run prisma:seed
-```
-
-### 6 — Iniciar el backend
-
-```bash
 npm run dev
 ```
 
-Debes ver:
-
-```
-✅ Server running on http://localhost:3000
-✅ Socket.io ready for dashboard connections
-✅ Alert Worker started
-```
-
-### 7 — Abrir el dashboard
-
-Abre el archivo `dashboard/index.html` directamente en el navegador (doble clic desde el explorador de archivos).
-
-No requiere instalación adicional ni servidor de frontend.
+En este modo, abre el dashboard directamente como archivo (`dashboard/index.html`) en lugar de `localhost:8080`.
 
 ---
 
@@ -176,22 +207,28 @@ scat-gi/
 │   │   ├── alerts/         # Alertas + worker Bull
 │   │   └── geo/            # Endpoints GeoJSON
 │   ├── middleware/         # Auth, errores, validación
-│   ├── jobs/               # Worker de alertas Bull
-│   ├── config/             # CORS, Redis, JWT
-│   └── shared/             # Logger, errores base, Prisma
+│   ├── jobs/                # Worker de alertas Bull
+│   ├── config/
+│   │   ├── cors.config.ts  # Orígenes permitidos (incluye :8080)
+│   │   ├── socket.config.ts
+│   │   └── ...
+│   └── shared/               # Logger, errores base, Prisma
 ├── prisma/
-│   ├── schema.prisma       # Esquema completo (6 entidades)
-│   ├── migrations/         # Migración inicial aplicada
-│   └── seed.ts             # 7 usuarios, 4 reportes, 3 zonas de riesgo
+│   ├── schema.prisma         # Esquema completo (6 entidades)
+│   ├── migrations/           # Migración inicial aplicada
+│   └── seed.ts                # 7 usuarios, 4 reportes, 3 zonas de riesgo
 ├── dashboard/
-│   └── index.html          # Dashboard operativo (sin dependencias)
+│   └── index.html             # Dashboard operativo (sin dependencias)
 ├── docs/
 │   ├── arquitectura.md
 │   ├── base-de-datos.md
 │   └── defensa.md
-├── docker-compose.yml      # PostgreSQL 15 + PostGIS + Redis 7
+├── docker-compose.yml         # Postgres + Redis + Backend + Dashboard (Nginx)
+├── Dockerfile                  # Imagen del backend
+├── docker-entrypoint.sh       # Migraciones + seed + arranque automático
+├── .dockerignore
 ├── .env.example
-├── AGENTS.md               # Guía obligatoria del proyecto
+├── AGENTS.md                   # Guía obligatoria del proyecto
 └── README.md
 ```
 
@@ -204,12 +241,33 @@ Cada módulo sigue la misma estructura de capas:
 ```
 módulo/
 ├── presentation/    → rutas Express + controllers + DTOs (Zod)
-├── application/     → service con lógica de negocio
-├── domain/          → tipos, enums y errores del negocio
-└── infrastructure/  → repository Prisma + clientes externos
+├── application/      → service con lógica de negocio
+├── domain/            → tipos, enums y errores del negocio
+└── infrastructure/   → repository Prisma + clientes externos
 ```
 
 El backend es un **monolito modular**. Un solo proceso Node.js con 5 módulos independientes. No usa microservicios.
+
+---
+
+## Arquitectura de despliegue (Docker)
+
+```
+┌─────────────────────────────────────────────┐
+│              docker-compose up -d --build     │
+└─────────────────────────────────────────────┘
+         │              │              │            │
+         ▼              ▼              ▼            ▼
+   ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌────────────┐
+   │ postgres │  │   redis   │  │ backend  │  │  dashboard  │
+   │  :5432   │  │   :6379   │  │  :3000   │  │   :8080     │
+   │ +PostGIS │  │           │  │  Node.js │  │   Nginx     │
+   └──────────┘  └───────────┘  └────┬─────┘  └──────┬──────┘
+                                       │                │
+                                       └──── API ───────┘
+```
+
+El backend espera a que Postgres esté `healthy` antes de iniciar, aplica migraciones, carga el seed (si no existe) y recién entonces levanta el servidor Express. El dashboard es un sitio estático servido por Nginx que consume la API del backend.
 
 ---
 
@@ -235,27 +293,6 @@ Dashboard actualiza en tiempo real
 
 ---
 
-## Scripts disponibles
-
-```bash
-# Desarrollo
-npm run dev              # Iniciar servidor en modo desarrollo
-
-# Base de datos
-npm run prisma:seed      # Cargar datos de prueba
-npm run prisma:migrate   # Aplicar migraciones pendientes
-npm run prisma:reset     # Reiniciar BD completa (PELIGROSO)
-
-# Producción
-npm run build            # Compilar TypeScript
-npm start                # Iniciar servidor compilado
-
-# Testing
-npm test                 # Ejecutar tests unitarios
-```
-
----
-
 ## Tecnologías
 
 | Tecnología | Versión | Propósito |
@@ -273,14 +310,26 @@ npm test                 # Ejecutar tests unitarios
 | Zod | 3.x | Validación |
 | Twilio | — | SMS (modo test) |
 | Leaflet | 1.9 | Mapa interactivo |
+| Nginx (Alpine) | — | Servidor estático del dashboard |
+| Docker + Docker Compose | — | Orquestación de los 4 servicios |
 
 ---
-
 ## Seguridad y privacidad
 
 - JWT con expiración máxima de 24 horas
 - Contraseñas cifradas con bcrypt (salt rounds: 10)
 - Rate limiting en endpoints de autenticación
-- CORS configurado para localhost
+- CORS configurado en `src/config/cors.config.ts`, incluyendo el origen del dashboard (`localhost:8080`)
 - Solo se almacenan coordenadas del foco reportado, no ubicación domiciliaria del ciudadano
 - Cumplimiento **Ley 19.628** de protección de datos personales (Chile)
+
+---
+## Solución de problemas comunes
+
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| `failed to connect to the docker API` | Docker Desktop no está corriendo | Abre Docker Desktop y espera el ícono estático |
+| Postgres en estado `Restarting` | Volumen corrupto de un intento anterior | `docker-compose down -v` y volver a levantar |
+| Error de CORS en consola del navegador | Origen no está en `cors.config.ts` | Agregar el origen a `allowedOrigins` y reconstruir backend |
+| `docker-compose ps` muestra tabla vacía | Falta ejecutar `up -d` | `docker-compose up -d --build` |
+| Cambios en el código no se reflejan | Imagen Docker no se reconstruyó | `docker-compose up -d --build backend` |
