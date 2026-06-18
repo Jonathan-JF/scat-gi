@@ -1,11 +1,10 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
     container_name: scat-gi-postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-postgis.sql:/docker-entrypoint-initdb.d/01-init-postgis.sql
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -15,9 +14,10 @@ services:
       timeout: 5s
       retries: 5
     environment:
+      POSTGRES_DB: scat_gi
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C.UTF-8"
       POSTGRES_HOST_AUTH_METHOD: "trust"
-    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "cron.database_name=scat-gi"]
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "cron.database_name=scat_gi"]
 
   redis:
     image: redis:7
@@ -26,6 +26,34 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: unless-stopped
+
+  backend:
+    build: .
+    container_name: scat-gi-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://postgres@postgres:5432/scat_gi?schema=public"
+      REDIS_URL: "redis://redis:6379"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  dashboard:
+    image: nginx:alpine
+    container_name: scat-gi-dashboard
+    ports:
+      - "8080:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
     restart: unless-stopped
 
 volumes:
